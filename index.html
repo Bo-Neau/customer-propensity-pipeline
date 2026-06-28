@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer Propensity Pipeline | Engineering Report</title>
+<meta name="description" content="A distributed, orchestrated ML pipeline. PySpark, Apache Airflow 3, Great Expectations, XGBoost and MLflow, run on 42 million REES46 e-commerce events. Validation AUC 0.935.">
+<style>
+  :root{
+    --navy:#0f2740; --navy2:#16314f; --blue:#1f6feb; --teal:#137a6e;
+    --green:#1a7f37; --red:#b42318; --amber:#9a6700; --ink:#1f2937;
+    --grey:#475467; --line:#d0d5dd; --soft:#f6f8fa; --softblue:#eef4fd;
+    --softgreen:#eaf5ee; --softamber:#fdf6e9; --codebg:#0d1117; --codefg:#c9d1d9;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       color:var(--ink);line-height:1.6;background:#fff;font-size:16px}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:920px;margin:0 auto;padding:0 24px}
+
+  /* hero */
+  header.hero{background:linear-gradient(160deg,#0f2740 0%,#16314f 70%,#1c4068 100%);color:#fff;
+    padding:64px 0 40px;border-bottom:5px solid var(--blue)}
+  .eyebrow{letter-spacing:.16em;text-transform:uppercase;font-size:13px;color:#9fb3c8;font-weight:600;margin:0 0 14px}
+  header.hero h1{font-size:40px;line-height:1.12;margin:0 0 10px;font-weight:800;letter-spacing:-.5px}
+  header.hero h2{font-size:19px;font-weight:500;color:#cbd7e6;margin:0 0 22px}
+  .stack-line{font-size:14px;color:#aebfd4;margin:0 0 28px}
+  .stack-line b{color:#e7eef7}
+  .hero-cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+  .btn{display:inline-block;padding:11px 20px;border-radius:8px;font-weight:600;font-size:14px}
+  .btn-primary{background:var(--blue);color:#fff}
+  .btn-primary:hover{background:#1a5fd0;text-decoration:none}
+  .btn-ghost{border:1px solid #3a5f87;color:#dce7f3}
+  .btn-ghost:hover{background:#1c3a5c;text-decoration:none}
+
+  /* kpi band */
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:-28px 0 0;box-shadow:0 10px 30px rgba(15,39,64,.10)}
+  .kpi{background:#fff;padding:18px 10px;text-align:center}
+  .kpi .n{font-size:26px;font-weight:800;color:var(--navy);line-height:1}
+  .kpi .l{font-size:11.5px;color:var(--grey);margin-top:6px}
+
+  section{padding:30px 0 6px}
+  h3.sec{font-size:24px;color:var(--navy);margin:18px 0 6px;font-weight:800;letter-spacing:-.3px}
+  h3.sec .num{color:var(--blue)}
+  .rule{height:2px;background:var(--line);border:0;margin:6px 0 18px}
+  h4{font-size:16.5px;color:var(--blue);margin:22px 0 6px}
+  p{margin:0 0 14px}
+  ul{margin:0 0 16px;padding-left:22px}
+  li{margin:6px 0}
+
+  table{width:100%;border-collapse:collapse;margin:6px 0 20px;font-size:14px}
+  th{background:var(--navy);color:#fff;text-align:left;padding:9px 11px;font-weight:600}
+  td{padding:8px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  tbody tr:nth-child(even){background:var(--soft)}
+  td.ok{color:var(--green);font-weight:700}
+  .mono{font-family:"SF Mono", "Roboto Mono",Menlo,Consolas,monospace;font-size:13px}
+
+  .callout{border-left:4px solid var(--blue);background:var(--softblue);padding:14px 18px;border-radius:0 8px 8px 0;margin:10px 0 20px}
+  .callout.green{border-color:var(--green);background:var(--softgreen)}
+  .callout.amber{border-color:var(--amber);background:var(--softamber)}
+  .callout h5{margin:0 0 6px;font-size:15px;color:var(--navy)}
+  .callout p{margin:0;font-size:14.5px}
+
+  pre{background:var(--codebg);color:var(--codefg);padding:14px 16px;border-radius:8px;overflow:auto;
+    font-family:"SF Mono","Roboto Mono",Menlo,Consolas,monospace;font-size:13px;line-height:1.5;margin:6px 0 20px}
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 20px}
+  .node{background:#fff;border:1.5px solid var(--blue);color:var(--navy);font-weight:600;
+    padding:8px 13px;border-radius:8px;font-size:13.5px}
+  .arrow{color:var(--blue);font-weight:700}
+
+  /* defect cards */
+  .defect{border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:0 0 14px;background:#fff}
+  .defect .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .defect .dn{font-weight:800;color:var(--navy);font-size:16px}
+  .badge{font-size:11px;font-weight:700;color:#fff;padding:2px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.04em}
+  .b-crit{background:var(--red)} .b-high{background:var(--amber)} .b-low{background:var(--grey)}
+  .defect p{margin:5px 0;font-size:14px}
+  .defect .lbl{font-weight:700;color:var(--ink)}
+
+  footer{margin-top:40px;background:var(--navy);color:#9fb3c8;padding:26px 0;font-size:13px}
+  footer a{color:#cbd7e6}
+  .toc{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:14px 20px;margin:26px 0 0}
+  .toc b{color:var(--navy)}
+  .toc ol{margin:8px 0 0;columns:2;column-gap:30px;padding-left:20px}
+  @media(max-width:680px){
+    header.hero h1{font-size:30px}
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .toc ol{columns:1}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Engineering Report</p>
+    <h1>Customer Propensity to Purchase</h1>
+    <h2>A distributed, orchestrated machine learning pipeline</h2>
+    <p class="stack-line"><b>PySpark</b> &middot; <b>Apache Airflow 3</b> &middot; <b>Great Expectations</b> &middot; <b>XGBoost</b> &middot; <b>MLflow</b> &middot; Docker</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="Propensity_Pipeline_Report.pdf">Download full PDF report</a>
+      <a class="btn btn-ghost" href="https://github.com/Bo-Neau/customer-propensity-pipeline">View source on GitHub</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="kpis">
+    <div class="kpi"><div class="n">7 / 7</div><div class="l">DAG tasks green</div></div>
+    <div class="kpi"><div class="n">0.935</div><div class="l">Validation AUC</div></div>
+    <div class="kpi"><div class="n">42.4M</div><div class="l">Events ingested</div></div>
+    <div class="kpi"><div class="n">9.24M</div><div class="l">Session features</div></div>
+    <div class="kpi"><div class="n">8</div><div class="l">Defects fixed</div></div>
+  </div>
+
+  <div class="toc">
+    <b>Contents</b>
+    <ol>
+      <li><a href="#summary">Executive summary</a></li>
+      <li><a href="#overview">Project overview</a></li>
+      <li><a href="#architecture">Architecture and design</a></li>
+      <li><a href="#findings">Findings: defects fixed</a></li>
+      <li><a href="#data">Data findings</a></li>
+      <li><a href="#model">Model and results</a></li>
+      <li><a href="#predictions">Predictions and behaviour</a></li>
+      <li><a href="#recommendations">Recommendations</a></li>
+    </ol>
+  </div>
+
+  <section id="summary">
+    <h3 class="sec">Executive Summary</h3><hr class="rule">
+    <p>This report documents the commissioning of a customer propensity to purchase pipeline, rebuilt from a single
+    node pandas and XGBoost workflow onto a distributed, orchestrated architecture. PySpark performs extract, transform
+    and load and feature engineering, Apache Airflow 3 orchestrates the workflow as a directed acyclic graph, Great
+    Expectations Core acts as a data quality gate, and XGBoost with MLflow handles training, evaluation and the model
+    registry. The entire stack runs in Docker on a single Apple Silicon workstation.</p>
+    <p>The codebase was delivered as a scaffold that had never executed against a live Docker daemon. Bringing it to a
+    first successful run surfaced eight distinct defects spanning infrastructure, orchestration, distributed compute,
+    data quality and the machine learning framework layer. Every defect was root caused from primary evidence and
+    corrected at source rather than worked around. The pipeline now completes end to end on the full 42.4 million event
+    month, producing a trained model registered for production.</p>
+    <div class="callout green">
+      <h5>Headline outcome</h5>
+      <p>Starting from a machine with no Docker, no Java and no Python data stack, the pipeline was taken to a verified
+      green run on the full month of REES46 data. The deployed model separates buyers from non buyers with a validation
+      AUC of 0.935, and is registered in MLflow as propensity-model version 1 under the production alias.</p>
+    </div>
+  </section>
+
+  <section id="overview">
+    <h3 class="sec"><span class="num">1.</span> Project Overview</h3><hr class="rule">
+    <p>The goal is the orchestration and distributed processing layer, not a new model. The brief is explicit that the
+    modelling approach and XGBoost hyperparameters should stay close to a standard pandas pipeline. The claim being
+    supported is migrated to a distributed, orchestrated architecture, not built a better model. A clean, demonstrable,
+    green pipeline run is therefore the primary deliverable, and model quality is treated as a gate to pass.</p>
+    <p>The source is the REES46 e-commerce behavior dataset from Kaggle, processed one monthly file at a time. The
+    October 2019 file was used: a 5.3 GB CSV containing 42,448,764 behavioural events. Each row is a single event
+    (view, cart, purchase, or remove from cart) carrying a timestamp, product and category identifiers, a brand, a
+    price, a user id and a session id.</p>
+    <h4>Technology stack</h4>
+    <table>
+      <thead><tr><th>Layer</th><th>Component</th><th>Version</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td>Orchestration</td><td>Apache Airflow</td><td>3.2.2</td><td>DAG scheduling, Task Execution API, web UI</td></tr>
+        <tr><td>Distributed compute</td><td>PySpark</td><td>4.1.2</td><td>CSV to Parquet, feature engineering in local[*] mode</td></tr>
+        <tr><td>Runtime</td><td>OpenJDK / Python</td><td>17 / 3.13</td><td>JVM for Spark, Python for tasks</td></tr>
+        <tr><td>Data quality</td><td>Great Expectations Core</td><td>1.18.1</td><td>Semantic expectations on the feature table</td></tr>
+        <tr><td>Modelling</td><td>XGBoost</td><td>3.3.0</td><td>Gradient boosted classifier</td></tr>
+        <tr><td>ML lifecycle</td><td>MLflow</td><td>3.14.0</td><td>Tracking, metrics, model registry, aliases</td></tr>
+        <tr><td>Metadata DB</td><td>PostgreSQL</td><td>16</td><td>Airflow metadata backend</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="architecture">
+    <h3 class="sec"><span class="num">2.</span> Architecture and Design</h3><hr class="rule">
+    <p>The workflow is a strict linear chain of seven tasks. A failure at any stage stops the run and prevents bad data
+    or a weak model from progressing.</p>
+    <div class="flow">
+      <span class="node">ingest</span><span class="arrow">&rarr;</span>
+      <span class="node">validate</span><span class="arrow">&rarr;</span>
+      <span class="node">transform</span><span class="arrow">&rarr;</span>
+      <span class="node">quality_gate</span><span class="arrow">&rarr;</span>
+      <span class="node">train</span><span class="arrow">&rarr;</span>
+      <span class="node">evaluate</span><span class="arrow">&rarr;</span>
+      <span class="node">deploy</span>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>Task</th><th>Engine</th><th>Responsibility</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>ingest</td><td>PySpark</td><td>Read raw CSV, stage as Parquet with an explicit schema</td></tr>
+        <tr><td>2</td><td>validate</td><td>PySpark</td><td>Structural checks: required columns, non empty, allowed event types</td></tr>
+        <tr><td>3</td><td>transform</td><td>PySpark</td><td>Aggregate events to one row per session, build features and target</td></tr>
+        <tr><td>4</td><td>quality_gate</td><td>GX Core</td><td>Semantic checks: uniqueness, nulls, value ranges on features</td></tr>
+        <tr><td>5</td><td>train</td><td>XGBoost</td><td>Bridge to pandas, train classifier, log to MLflow</td></tr>
+        <tr><td>6</td><td>evaluate</td><td>MLflow</td><td>Read logged AUC, gate on a 0.90 threshold</td></tr>
+        <tr><td>7</td><td>deploy</td><td>MLflow</td><td>Register model version, point the production alias at it</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <h5>Design principle: never pass data through XCom</h5>
+      <p>Airflow XCom is backed by the metadata database and is not built for bulk data. Every task writes its output to
+      disk and passes only a small string (a file path or an MLflow run id) to the next task.</p>
+    </div>
+    <h4>Deliberate scope decisions</h4>
+    <ul>
+      <li><b>Single node Spark.</b> PySpark runs in local[*] mode inside the Airflow worker. No separate Spark cluster, a conscious decision to avoid extra infrastructure for a portfolio scale project.</li>
+      <li><b>The pandas bridge in training is intentional.</b> The per session feature table fits comfortably in memory, so train reads it with pandas and trains XGBoost in process.</li>
+      <li><b>Two layers of data checks.</b> Cheap structural checks live in validate, expensive semantic checks live in quality_gate after feature engineering.</li>
+    </ul>
+  </section>
+
+  <section id="findings">
+    <h3 class="sec"><span class="num">3.</span> Findings: Defects Identified and Resolved</h3><hr class="rule">
+    <p>Eight defects were identified and corrected, each root caused from primary evidence (container logs, supervisor
+    signals, tracebacks) and fixed at source. They are ordered roughly by the sequence in which they blocked the pipeline.</p>
+
+    <div class="defect">
+      <div class="top"><span class="dn">1. DAG import path not simplified for Airflow 3</span><span class="badge b-low">Low</span></div>
+      <p><span class="lbl">Cause.</span> The DAG used a try and except fallback import. The <span class="mono">airflow.sdk</span> path is the canonical TaskFlow import for 3.2.2.</p>
+      <p><span class="lbl">Fix.</span> Imported directly from <span class="mono">airflow.sdk</span>, verified by listing the DAG with no import errors.</p>
+    </div>
+
+    <div class="defect">
+      <div class="top"><span class="dn">2. JAVA_HOME hardcoded to amd64 on an arm64 host</span><span class="badge b-crit">Critical</span></div>
+      <p><span class="lbl">Symptom.</span> The ingest task was killed within seconds. A Spark smoke test reported JAVA_GATEWAY_EXITED, the Java gateway process exited before sending its port number.</p>
+      <p><span class="lbl">Cause.</span> The Dockerfile set JAVA_HOME to the amd64 path, but on Apple Silicon the JDK installs to the arm64 path. PySpark launches the JVM via <span class="mono">$JAVA_HOME/bin/java</span>, which did not exist.</p>
+      <p><span class="lbl">Fix.</span> An architecture aware symlink created at build time with <span class="mono">dpkg --print-architecture</span>, pointing a stable default-java path at the correct JDK.</p>
+    </div>
+
+    <div class="defect">
+      <div class="top"><span class="dn">3. Missing Task Execution API URL and shared JWT secret</span><span class="badge b-crit">Critical</span></div>
+      <p><span class="lbl">Symptom.</span> Every task was terminated by the supervisor with SIGKILL about nine seconds in, after repeated Connection refused retries.</p>
+      <p><span class="lbl">Cause.</span> Airflow 3 runs all tasks through the Task Execution API. The task defaulted to localhost:8080, where no api-server listens inside the scheduler container, so it could not call home and was killed. A shared JWT secret was also missing.</p>
+      <p><span class="lbl">Fix.</span> Added <span class="mono">EXECUTION_API_SERVER_URL</span> pointing at the api-server service and a shared <span class="mono">JWT_SECRET</span> across all services, mirroring the official Airflow 3.2.2 compose.</p>
+    </div>
+
+    <div class="defect">
+      <div class="top"><span class="dn">4. Timestamp parsing blind to the UTC suffix</span><span class="badge b-high">High</span></div>
+      <p><span class="lbl">Cause.</span> Real timestamps are formatted "2019-10-01 00:00:00 UTC" while fixtures use ISO. <span class="mono">to_timestamp</span> with no format returns null on the UTC text, which would null session duration and cause training to drop every row.</p>
+      <p><span class="lbl">Fix.</span> Parse both formats explicitly with a coalesce, so a format mismatch can never silently null the timestamps.</p>
+    </div>
+
+    <div class="defect">
+      <div class="top"><span class="dn">5. Spark driver heap too small for the shuffle</span><span class="badge b-high">High</span></div>
+      <p><span class="lbl">Symptom.</span> transform failed after about twenty seconds with py4j errors as the Spark JVM died mid shuffle.</p>
+      <p><span class="lbl">Cause.</span> In local[*] mode the driver JVM is also the executor, and the default 1 GB heap cannot shuffle 42 million rows through the groupBy and countDistinct aggregations.</p>
+      <p><span class="lbl">Fix.</span> Configured <span class="mono">spark.driver.memory</span> to 4 GB, which fits inside the 7.8 GB Docker VM alongside the Airflow processes.</p>
+    </div>
+
+    <div class="defect">
+      <div class="top"><span class="dn">6. Session key not unique, null sessions present</span><span class="badge b-high">High</span></div>
+      <p><span class="lbl">Symptom.</span> quality_gate failed: the uniqueness and not null expectations on the session key did not hold.</p>
+      <p><span class="lbl">Cause.</span> The aggregation grouped by session and user id together, emitting duplicate session rows for the ~350 REES46 sessions carrying more than one user id, plus two null sessions. The gate correctly caught both.</p>
+      <p><span class="lbl">Fix.</span> Aligned the code with its stated contract: drop null sessions, group by session alone, keep a single representative user id. The gate now passes honestly rather than being weakened.</p>
+    </div>
+
+    <div class="defect">
+      <div class="top"><span class="dn">7. MLflow 3 file store maintenance mode and removed stage API</span><span class="badge b-high">High</span></div>
+      <p><span class="lbl">Cause.</span> MLflow 3 raises by default on the file store and removed the old model stage API. Both would have failed the last two tasks.</p>
+      <p><span class="lbl">Fix.</span> Set <span class="mono">MLFLOW_ALLOW_FILE_STORE</span> and rewrote deploy to register the model and point a production alias with <span class="mono">set_registered_model_alias</span>.</p>
+    </div>
+
+    <div class="defect">
+      <div class="top"><span class="dn">8. Task parameter named run_id, a reserved context key</span><span class="badge b-high">High</span></div>
+      <p><span class="lbl">Symptom.</span> evaluate failed with "the key run_id in args is reserved", appearing only once every upstream task was finally green.</p>
+      <p><span class="lbl">Cause.</span> Airflow injects run_id as a reserved task context key. A TaskFlow parameter of the same name collided during keyword resolution and raised before the function body ran.</p>
+      <p><span class="lbl">Fix.</span> Renamed the parameter to <span class="mono">train_run_id</span> and documented the constraint.</p>
+    </div>
+  </section>
+
+  <section id="data">
+    <h3 class="sec"><span class="num">4.</span> Data Findings</h3><hr class="rule">
+    <p>The month of raw events was aggregated to one row per user session. The Great Expectations gate is not decoration:
+    on the real data it caught two null and 350 duplicate session keys, resolved at the feature engineering layer.</p>
+    <table>
+      <thead><tr><th>Stage</th><th>Rows</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>Raw events (CSV)</td><td>42,448,764</td><td>view, cart, purchase, remove_from_cart</td></tr>
+        <tr><td>Session features (pre clean)</td><td>9,244,772</td><td>included 2 null and 350 duplicate session keys</td></tr>
+        <tr><td>Session features (modelled)</td><td>9,244,421</td><td>unique, non null sessions used for training</td></tr>
+      </tbody>
+    </table>
+    <h4>Class balance and buyer profile</h4>
+    <p>Purchase is a rare event: 6.81 percent of sessions are buyers against 93.19 percent non buyers, which is why
+    training applies scale_pos_weight. Comparing mean feature values shows where the signal lives. Buyers add to cart
+    far more often and, notably, spend less time per session, consistent with decisive, intent driven visits.</p>
+    <table>
+      <thead><tr><th>Feature</th><th>Buyers (mean)</th><th>Non buyers (mean)</th><th>Read</th></tr></thead>
+      <tbody>
+        <tr><td>cart_count</td><td>0.792</td><td>0.050</td><td>about 16x higher for buyers</td></tr>
+        <tr><td>intent_score</td><td>3.169</td><td>1.727</td><td>strong separation</td></tr>
+        <tr><td>engagement_score</td><td>6.469</td><td>5.183</td><td>buyers more engaged</td></tr>
+        <tr><td>view_count</td><td>5.561</td><td>4.327</td><td>buyers view slightly more</td></tr>
+        <tr><td>session_duration_seconds</td><td>658.7</td><td>1069.9</td><td>buyers spend less time, decisive</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="model">
+    <h3 class="sec"><span class="num">5.</span> Model and Results</h3><hr class="rule">
+    <p>The model is an XGBoost classifier kept deliberately close to a standard pandas configuration: 200 estimators,
+    max depth 6, learning rate 0.1, positive class up weighted to counter the 6.81 percent base rate, evaluated by AUC
+    on an 80 / 20 stratified split.</p>
+    <div class="callout green">
+      <h5>Result</h5>
+      <p>Validation AUC 0.935, comfortably above the 0.90 deployment gate. The model is registered as propensity-model
+      version 1 with the production alias.</p>
+    </div>
+    <h4>Feature importance (by gain)</h4>
+    <table>
+      <thead><tr><th>Rank</th><th>Feature</th><th>Gain</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>cart_count</td><td>15,541</td></tr>
+        <tr><td>2</td><td>session_duration_seconds</td><td>12,747</td></tr>
+        <tr><td>3</td><td>view_count</td><td>5,743</td></tr>
+        <tr><td>4</td><td>distinct_brands_viewed</td><td>4,021</td></tr>
+        <tr><td>5</td><td>engagement_score</td><td>1,116</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="predictions">
+    <h3 class="sec"><span class="num">6.</span> Predictions and Model Behaviour</h3><hr class="rule">
+    <p>The registered production model was loaded and used to score real sessions. The table contrasts known buyers with
+    known non buyers. Aggregated over the whole month, the mean predicted value is 0.86 for actual buyers against 0.16
+    for non buyers, a clear separation consistent with the 0.935 AUC.</p>
+    <table>
+      <thead><tr><th>Session</th><th>views</th><th>carts</th><th>intent</th><th>score</th><th>actual</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">b1e86763</td><td>3</td><td>0</td><td>1</td><td>1.00</td><td>buyer</td></tr>
+        <tr><td class="mono">500e0542</td><td>1</td><td>1</td><td>3</td><td>1.00</td><td>buyer</td></tr>
+        <tr><td class="mono">e3d7ff27</td><td>17</td><td>0</td><td>3</td><td>1.00</td><td>non buyer (false positive)</td></tr>
+        <tr><td class="mono">7de68edd</td><td>4</td><td>0</td><td>3</td><td>0.00</td><td>buyer (false negative)</td></tr>
+        <tr><td class="mono">664c1a7a</td><td>1</td><td>0</td><td>1</td><td>0.00</td><td>non buyer</td></tr>
+      </tbody>
+    </table>
+    <h4>Operating point</h4>
+    <p>On a 500,000 session sample, at the deployed decision threshold: recall 0.861, precision 0.283, F1 0.426. The
+    high recall and modest precision are the expected shape for rare event propensity, the model catches most buyers at
+    the cost of a number of false positives.</p>
+    <div class="callout amber">
+      <h5>An important caveat surfaced during prediction analysis</h5>
+      <p>The deployed model returns class labels (0 or 1), not calibrated probabilities, which is why every score above
+      is exactly 0.00 or 1.00 and precision and recall do not move with the threshold. The genuine ranking metric, AUC
+      0.935, comes from predict_proba at training time. For a true, tunable propensity score, deploy should expose
+      predict_proba. This is captured as a recommendation rather than presented as a probability.</p>
+    </div>
+  </section>
+
+  <section id="recommendations">
+    <h3 class="sec"><span class="num">7.</span> Recommendations and Future Work</h3><hr class="rule">
+    <table>
+      <thead><tr><th>Priority</th><th>Recommendation</th><th>Rationale</th></tr></thead>
+      <tbody>
+        <tr><td>High</td><td>Expose predict_proba in deploy and add a predict task</td><td>Turn the binary label into a tunable propensity score and a visible predictions output</td></tr>
+        <tr><td>Medium</td><td>Add an MLflow UI service to the compose stack</td><td>Browse runs, metrics and the registry visually</td></tr>
+        <tr><td>Medium</td><td>Add task level retries to the DAG</td><td>Self heal transient supervisor or store hiccups</td></tr>
+        <tr><td>Medium</td><td>Calibrate the classifier and tune the decision threshold</td><td>Lift precision at the chosen operating point</td></tr>
+        <tr><td>Low</td><td>Parameterise the month and process multiple files</td><td>Scale beyond a single October snapshot</td></tr>
+      </tbody>
+    </table>
+    <h4>Closing assessment</h4>
+    <p>The rebuild achieves its stated objective. A pandas scale workflow now runs as a distributed, orchestrated,
+    quality gated pipeline on tens of millions of events, with training, evaluation and registry handled through an
+    industry standard ML lifecycle tool. The defects encountered were characteristic of moving a scaffold onto real
+    infrastructure, and all were resolved at source and documented.</p>
+    <p style="margin-top:18px">
+      <a class="btn btn-primary" href="Propensity_Pipeline_Report.pdf">Download the full PDF report</a>
+    </p>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    Customer Propensity Pipeline &middot; Engineering report &middot; Pipeline status: operational, 7 of 7 tasks green, model registered.<br>
+    Source: <a href="https://github.com/Bo-Neau/customer-propensity-pipeline">github.com/Bo-Neau/customer-propensity-pipeline</a>
+  </div>
+</footer>
+
+</body>
+</html>
