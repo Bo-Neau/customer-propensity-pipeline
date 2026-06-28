@@ -1,0 +1,6 @@
+title: Customer Propensity Pipeline
+description: >-
+  A distributed, orchestrated ML pipeline. PySpark, Apache Airflow 3,
+  Great Expectations, XGBoost and MLflow, run on 42 million REES46 events.
+theme: jekyll-theme-cayman
+show_downloads: false

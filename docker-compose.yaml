@@ -1,0 +1,122 @@
+# Airflow 3 docker-compose for local development.
+# NOTE: verify this against the current official quickstart before first run,
+# see CLAUDE.md item 1. Airflow 3 ships frequent patch releases and the
+# auth/init flow in particular has changed since FAB-based auth was removed.
+# Reference: https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html
+
+x-airflow-common:
+  &airflow-common
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW_UID: ${AIRFLOW_UID:-50000}
+    # Airflow 3 runs every task through the Task Execution API, so the task
+    # (running in the scheduler container under LocalExecutor) must be told
+    # where the api-server lives. Our api-server service is "airflow-api-server".
+    # Without this it defaults to localhost:8080, gets connection-refused, and
+    # the supervisor SIGKILLs the task. The JWT secret must be the SAME across
+    # all services or task auth against the api-server fails.
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-api-server:8080/execution/'
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:-airflow_jwt_secret}
+    # Stable, mounted MLflow store so train/evaluate/deploy share the same
+    # tracking + model registry and it survives container restarts. MLflow 3
+    # put the file store in "maintenance mode" and raises unless this opt-in is
+    # set; the file store still fully backs experiments, artifacts and the model
+    # registry, and keeping it file-based avoids running a separate MLflow DB
+    # server for this single-node portfolio pipeline.
+    MLFLOW_TRACKING_URI: file:///opt/airflow/models/mlruns
+    MLFLOW_ALLOW_FILE_STORE: 'true'
+    # Point PySpark at the JDK. The fixed Dockerfile bakes the correct
+    # JAVA_HOME via a /usr/lib/jvm/default-java symlink; this override lets an
+    # already-built image (whose JAVA_HOME was the wrong arch) work on recreate
+    # without a full rebuild. Override per machine via JAVA_HOME in .env.
+    JAVA_HOME: ${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-arm64}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./src:/opt/airflow/src
+    - ./tests:/opt/airflow/tests
+    - ./data:/opt/airflow/data
+    - ./models:/opt/airflow/models
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    # Runs the DB migration (via _AIRFLOW_DB_MIGRATE, honoured by the image
+    # entrypoint) and creates the mlflow store dir. NOTE: Airflow 3.2 defaults
+    # to SimpleAuthManager, NOT FAB, so the _AIRFLOW_WWW_USER_* user-creation
+    # vars are ignored ("Skipping user creation as auth manager different from
+    # Fab is used"). The admin password is auto-generated on each api-server
+    # start. Get it with:
+    #   docker compose logs airflow-api-server | grep "Password for user"
+    # Username is "admin".
+    command:
+      - -c
+      - "mkdir -p /opt/airflow/models/mlruns && /entrypoint airflow version"
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+
+  airflow-api-server:
+    <<: *airflow-common
+    command: api-server
+    ports:
+      - "8080:8080"
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-db-volume:
